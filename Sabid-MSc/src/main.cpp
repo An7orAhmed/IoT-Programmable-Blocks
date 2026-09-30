@@ -6,7 +6,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 
-#define DEVICE_ID "IoT-Block-002"
+#define DEVICE_ID "IoT-Block-001"
 
 #define LED_PIN 14
 #define BUTTON_PIN 12
