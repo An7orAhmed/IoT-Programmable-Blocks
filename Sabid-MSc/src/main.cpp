@@ -6,7 +6,7 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 
-#define DEVICE_ID "IoT-Block-001"
+#define DEVICE_ID "IoT-Block-002"
 
 #define LED_PIN 14
 #define BUTTON_PIN 12
@@ -20,6 +20,7 @@ const uint32_t BOARD_LED_BLINK_INTERVAL_MS = 700;
 const uint32_t REMOTE_PULL_INTERVAL_MS = 500;
 const uint32_t REMOTE_PUSH_MIN_INTERVAL_MS = 200;
 const uint32_t SENSOR_READ_INTERVAL_MS = 2000;
+const uint32_t STATUS_LOG_INTERVAL_MS = 1000;
 const uint32_t CONFIG_MAGIC = 0xB10C2026;
 const uint8_t AP_PASSWORD_MIN_LEN = 8;
 
@@ -56,6 +57,7 @@ float tempC = NAN;
 bool humidityValid = false;
 float humidityPercent = NAN;
 uint32_t lastSensorReadMs = 0;
+uint32_t lastStatusLogMs = 0;
 bool lastObservedTempValid = false;
 float lastObservedTempC = NAN;
 bool lastObservedHumidityValid = false;
@@ -76,48 +78,6 @@ String tempJsonValue() {
     return "null";
   }
   return String(tempC, 2);
-}
-
-bool parseJsonFloatField(const String& json, const char* key, float& out) {
-  String token = "\"" + String(key) + "\"";
-  int keyPos = json.indexOf(token);
-  if (keyPos < 0) {
-    return false;
-  }
-
-  int colonPos = json.indexOf(':', keyPos + token.length());
-  if (colonPos < 0) {
-    return false;
-  }
-
-  int valuePos = colonPos + 1;
-  while (valuePos < static_cast<int>(json.length()) &&
-         (json[valuePos] == ' ' || json[valuePos] == '\t' || json[valuePos] == '\r' || json[valuePos] == '\n')) {
-    valuePos++;
-  }
-
-  if (valuePos >= static_cast<int>(json.length())) {
-    return false;
-  }
-
-  int endPos = valuePos;
-  const int len = static_cast<int>(json.length());
-  while (endPos < len) {
-    char c = json[endPos];
-    bool numericChar = (c >= '0' && c <= '9') || c == '+' || c == '-' || c == '.' || c == 'e' || c == 'E';
-    if (!numericChar) {
-      break;
-    }
-    endPos++;
-  }
-
-  if (endPos == valuePos) {
-    return false;
-  }
-
-  String numberText = json.substring(valuePos, endPos);
-  out = numberText.toFloat();
-  return true;
 }
 
 String normalizedServerBaseUrl() {
@@ -187,11 +147,6 @@ void applyRemoteIoState(const String& payload) {
   if ((parseJsonBoolField(payload, "buzzer", value) || parseJsonBoolField(payload, "buzz", value)) && buzzerState != value) {
     buzzerState = value;
     changed = true;
-  }
-
-  float remoteTemp = NAN;
-  if (parseJsonFloatField(payload, "tempC", remoteTemp)) {
-    Serial.printf("Remote tempC: %.2f\n", remoteTemp);
   }
 
   if (changed) {
@@ -361,6 +316,31 @@ void updateSensorsIfNeeded() {
   if (humidityValid) {
     humidityPercent = measuredHumidity;
   }
+}
+
+void logIoStatusIfNeeded() {
+  const uint32_t now = millis();
+  if (now - lastStatusLogMs < STATUS_LOG_INTERVAL_MS) {
+    return;
+  }
+  lastStatusLogMs = now;
+
+  Serial.printf("[status] pirPin=%s motion=%s button=%s led=%s buzzer=%s tempC=",
+                digitalRead(PIR_SENSOR_PIN) == HIGH ? "HIGH" : "LOW", motionState ? "DETECTED" : "CLEAR",
+                digitalRead(BUTTON_PIN) == LOW ? "PRESSED" : "RELEASED", ledState ? "ON" : "OFF",
+                buzzerState ? "ON" : "OFF");
+  if (tempValid) {
+    Serial.printf("%.1f", tempC);
+  } else {
+    Serial.print("INVALID");
+  }
+  Serial.print(" humidity=");
+  if (humidityValid) {
+    Serial.printf("%.1f%%", humidityPercent);
+  } else {
+    Serial.print("INVALID");
+  }
+  Serial.println();
 }
 
 void buildDeviceHostname() {
@@ -722,4 +702,5 @@ void loop() {
   updateBoardLed();
   digitalWrite(LED_PIN, ledState ? HIGH : LOW);
   digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+  logIoStatusIfNeeded();
 }

@@ -89,6 +89,7 @@ platformio device monitor -b 115200
 
 Notes:
 - Firmware prints restored config and connection logs to serial.
+- Firmware prints PIR, motion, DHT11, button, LED, and buzzer status once per second.
 - If no valid config exists in EEPROM, defaults are used.
 
 ## Runtime Behavior
